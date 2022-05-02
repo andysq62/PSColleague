@@ -4,7 +4,7 @@ Function Stop-ColleagueEnvironment {
         [parameter(Mandatory, Position = 0)]
         [String[]]$Environment,
         [parameter(Position = 1)]
-        [String[]]$EMail = 'EllucianProdFiles@american.edu'
+        [String[]]$EMail = (Get-COEmail -EMail 'ProdFiles')
     )
     $ErrorAction = $ErrorActionPreference
     $ErrorActionPreference = 'Stop'

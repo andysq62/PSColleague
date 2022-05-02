@@ -1,6 +1,7 @@
 Function Get-CoPhantomUserProcess {
        [CmdletBinding()]
        param(
+              [String]$Environment = 'prod',
               [Parameter(Mandatory)]
               [String]$UserNum,
               [Parameter(Mandatory)]
@@ -37,7 +38,7 @@ ORDER BY psdt.[PSDT_CRT_START_DATE] DESC, psdt.[PSDT_CRT_START_TIME] DESC, psdt.
 
        $Query | Write-Verbose
 
-       $Result = Invoke-SQLCmd -ServerInstance colprdsqln1 -Database prod -Query $Query
+       $Result = Invoke-SQLCmd -ServerInstance (Get-COSQLNode -Environment $Environment) -Database $Environment -Query $Query
 
        $Result | Write-Output
 }

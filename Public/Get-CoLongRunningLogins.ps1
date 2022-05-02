@@ -8,21 +8,25 @@ function Get-CoLongRunningLogins {
         [Int]$EDXHoursOld = 6
     )
 
+    $PHUser = ((Get-CoCredential -AdminAccount 'ProcessHandler').UserName).SubString(0, 9)
+    $EDXUser = (Get-CoCredential -AdminAccount 'EDXManager').UserName
+    $ColleagueAdministrator = (Get-CoCredential -AdminAccount 'ColleagueAdministrator').UserName
+
     $LongRunningPHProcs = @()
     $LongRunningUserProcs = @()
     
     $ProcessHandlerPID = Get-CoProcessHandlerPid -Environment $Environment
 
     $LongRunningPHProcs = Get-CoListUser -Environment $Environment | Where-Object {
-        ($_.UserName -match 'svcprcsha') -and
+        ($_.UserName -match $pHUser) -and
         ($_.UserNum -notmatch "$ProcessHandlerPID") -and
         ($_.DateTime -lt (Get-Date).AddHours(-$PHHoursOld))
     }
     
     $LongRunningUserProcs = Get-CoListUser -Environment $Environment | Where-Object {
-        ($_.UserName -notmatch 'ellucian') -and
-        ($_.UserName -notmatch 'SvcEDXMgr') -and
-        ($_.UserName -notmatch 'Svcprcsha') -and
+        ($_.UserName -notmatch $ColleagueAdministrator) -and
+        ($_.UserName -notmatch $EDXUser) -and
+        ($_.UserName -notmatch $PHUser) -and
         ($_.DateTime -lt (Get-Date).AddHours(-$UserHoursOld))
     }
 

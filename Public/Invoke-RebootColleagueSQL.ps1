@@ -1,4 +1,4 @@
-Function Invoke-RebootColleagueSQL {
+Function Invoke-AURebootColleagueSQL {
     [CmdletBinding()]
     param(
         [ValidateSet('clean', 'development', 'test', 'prod')]
@@ -19,73 +19,44 @@ Function Invoke-RebootColleagueSQL {
     $E = $Environments | Where-Object { $_.Name -eq "$Environment" }
     #     $RebootTimeOut = 7200
     $DBTimeOut = 120
-    $StopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
+    #    $StopWatch = New-Object -TypeName System.Diagnostics.Stopwatch
 
     If ((Get-DbaAvailabilityGroup -SqlInstance $E.Nodes.Node1 -AvailabilityGroup $E.Nodes.AvailabilityGroup).PrimaryReplica -ne $E.Nodes.Node1) {
         Throw "$($E.Name): $($E.Nodes.Node1) is not the primary replica"
     }
     Else {
-        "$($E.Name): $($E.Nodes.Node1) is the primary replica" | Tee-Object -Variable msg | Write-CoLog -LogPath $LogFile
+        "$($E.Name): $($E.Nodes.Node1) is the primary replica" | Tee-Object -Variable msg | Write-AULog -LogPath $LogFile
         $msg | Write-Verbose
     }
 
-    "$($E.Name): Starting Failover to $($E.Nodes.Node2)" | Tee-Object -Variable msg | Write-CoLog -LogPath $LogFile
+    "$($E.Name): Starting Failover to $($E.Nodes.Node2)" | Tee-Object -Variable msg | Write-AULog -LogPath $LogFile
     $msg | Write-Verbose
     Invoke-DbaAgFailover -SqlInstance $E.Nodes.Node2 -AvailabilityGroup $E.Nodes.AvailabilityGroup -EnableException -Confirm:$False
-    Start-Sleep -Seconds 5
-    If ((Get-DbaAvailabilityGroup -SqlInstance $E.Nodes.Node2 -AvailabilityGroup $E.Nodes.AvailabilityGroup).PrimaryReplica -ne $E.Nodes.Node2) {
-        Throw "$($E.Name): $($E.Nodes.Node2) is not the primary replica"
-    }
-    Else {
-        "$($E.Name): $($E.Nodes.Node2) is the primary replica" | Tee-Object -Variable msg | Write-CoLog -LogPath $LogFile
-        $msg | Write-Verbose
-    }
+    Start-Sleep -Seconds 30
 
-    "$($E.Name): Now rebooting $($E.Nodes.Node1)" | Tee-Object -Variable msg | Write-CoLog -LogPath $LogFile
-    $msg | Write-Verbose
-    Restart-Computer -ComputerName $E.Nodes.Node1 -Wait -Force
-    While (-Not (Get-IsSQLRunning -ComputerName $E.Nodes.Node1)) { Start-Sleep -Seconds 5 }
-    $StopWatch.Start()
-    While ((!((Get-DbaDatabase -SqlInstance $E.Nodes.Node1 -Database $E.Name -ErrorAction SilentlyContinue).IsAccessible)) -and ($StopWatch.Elapsed.TotalSeconds -lt $DBTimeOut)) {
-        Start-Sleep -Seconds 5
-    }
-    If ($StopWatch.Elapsed.TotalSeconds -ge $DBTimeOut) {
-        Throw "Cannot reach $($E.Name) or timed out after failover attempt"
-    }
-    $StopWatch.Stop()
-    $StopWatch.Reset()
+    Restart-AUSQLComputer -ComputerName $E.Nodes.Node1 -Database $E.Name
 
-    "$($E.Name): Now Failover to $($E.Nodes.Node1)" | Tee-Object -Variable msg | Write-CoLog -LogPath $LogFile
+    #    $StopWatch.Reset()
+    Start-Sleep -Seconds 20
+    "$($E.Name): Now Failover to $($E.Nodes.Node1)" | Tee-Object -Variable msg | Write-AULog -LogPath $LogFile
     $msg | Write-Verbose
     Invoke-DbaAgFailover -SqlInstance $E.Nodes.Node1 -AvailabilityGroup $E.Nodes.AvailabilityGroup -EnableException -Confirm:$False
-    Start-Sleep -Seconds 5
-    If ((Get-DbaAvailabilityGroup -SqlInstance $E.Nodes.Node1 -AvailabilityGroup $E.Nodes.AvailabilityGroup).PrimaryReplica -ne $E.Nodes.Node1) {
-        Throw "$($E.Name): $($E.Nodes.Node1) is not the primary replica"
-    }
-    Else {
-        "$($E.Name): $($E.Nodes.Node1) is the primary replica" | Tee-Object -Variable msg | Write-CoLog -LogPath $LogFile
-        $msg | Write-Verbose
-    }
+    Start-Sleep -Seconds 30
 
-    "$($E.Name): Now Rebooting $($E.Nodes.Node2)" | Tee-Object -Variable msg | Write-CoLog -LogPath $LogFile
+    Restart-AUSQLComputer -ComputerName $E.Nodes.Node2 -Database $E.Name
+
+
+    "$($E.Name): Now rebooting $($E.Nodes.Node3), $($E.Nodes.Node4) and $($E.AppServer)" | Tee-Object -Variable msg | Write-AULog -LogPath $LogFile
     $msg | Write-Verbose
-    Restart-Computer -ComputerName $E.Nodes.Node2 -Wait -Force
-    While (-Not (Get-IsSQLRunning -ComputerName $E.Nodes.Node2)) { Start-Sleep -Seconds 5 }
-    $StopWatch.Start()
-    While ((!((Get-DbaDatabase -SqlInstance $E.Nodes.Node2 -Database $E.Name -ErrorAction SilentlyContinue).IsAccessible)) -and ($StopWatch.Elapsed.TotalSeconds -lt $DBTimeOut)) {
-        Start-Sleep -Seconds 5
+    If (($E.Name -eq 'prod') -or ($E.Name -eq 'test')) {
+        Restart-Computer -ComputerName $E.Nodes.Node3, $E.Nodes.Node4, $E.AppServer -Wait -For Powershell -Force
     }
-    If ($StopWatch.Elapsed.TotalSeconds -ge $DBTimeOut) {
-        Throw "Cannot reach $($E.Nodes.Node2) $($E.Name) or timed out after failover attempt"
+    else {
+        Restart-Computer -ComputerName $E.AppServer -Wait -For Powershell -Force
     }
-    $StopWatch.Stop()
-
-    "$($E.Name): Now rebooting $($E.Nodes.Node3), $($E.Nodes.Node4) and $($E.AppServer)" | Tee-Object -Variable msg | Write-CoLog -LogPath $LogFile
-    $msg | Write-Verbose
-    Restart-Computer -ComputerName $E.Nodes.Node3, $E.Nodes.Node4, $E.AppServer -Wait -Force
 
 
-    "$($E.Name): End Reboot of Colleague Servers" | Tee-Object -Variable msg | Write-CoLog -LogPath $LogFile
+    "$($E.Name): End Reboot of Colleague Servers" | Tee-Object -Variable msg | Write-AULog -LogPath $LogFile
     $msg | Write-Verbose
     $ErrorActionPreference = $ErrorAction
 
